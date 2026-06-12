@@ -17,10 +17,10 @@ const { useState, useMemo, useEffect, useCallback } = React;
 
 
 
-// ===== Config (目標：既存) =====
-const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdIh-pq7ZlAD-nlsmcK5UeBJIdYen5YXKQNKBl3PxxLA3MI1Q/formResponse";
-const SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSwjaOZ_iv_KinUkfCoA7esh-d8aOmuPP7n7pbwqyINMM1LuPua4nG0PLt7k4gvh5anzYtVCRRRfTHy/pub?output=csv";
-const ENTRY = { member: "entry.2107932803", skill: "entry.1670799125", current: "entry.584527287", target: "entry.168608388", plan: "entry.551937194" };
+// ===== Config (目標：新規フォーム / スコアと同じスプシの別タブ) =====
+const FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSfXJUlVAtA-N8mpXB-cewURfhIzy0RtYkwtwIFvNbpwEiGTqw/formResponse";
+const SHEET_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ1mVZMAQudjR6DFNtiVh32MUedK-d0Gf03IDF0__GfF-1QSP8dOYjFnTVJ_amagG0rRJJIqUPSE304/pub?gid=544397288&single=true&output=csv";
+const ENTRY = { member: "entry.1403805659", skill: "entry.1038153616", current: "entry.1878643568", target: "entry.1778813066", plan: "entry.1527198384" };
 
 // ===== Config (スコア：新規) =====
 const SCORE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScZ46KjLtQW9mx5DLWji5pnOU-i2ujLHAVchgha7taIKpZKJQ/formResponse";
@@ -107,7 +107,7 @@ async function submitToForm(member, skill, current, target, plan) {
   body.append(ENTRY.member, FORM_MEMBER_NAMES[member] || member);
   body.append(ENTRY.skill, `${skill.id + 1}. ${skill.name}`);
   body.append(ENTRY.current, String(current || 0));
-  body.append(ENTRY.target, target > 0 ? FULLWIDTH[target] : "０");
+  body.append(ENTRY.target, String(target || 0));
   body.append(ENTRY.plan, plan || "");
   await fetch(FORM_URL, { method: "POST", body, mode: "no-cors" });
 }
