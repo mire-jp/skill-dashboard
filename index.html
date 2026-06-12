@@ -283,15 +283,17 @@ function ScorePanel({ member, initialSkill, rater, raterName, onClose, csvScores
 }
 
 // ===== Goal Panel =====
-function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill }) {
+function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill, rater, raterName, onRequestIdentity }) {
+  const canEdit = rater === member.short;
   const [selSkill, setSelSkill] = useState(initialSkill ?? null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [localGoals, setLocalGoals] = useState(() => JSON.parse(JSON.stringify(goals[member.short] || {})));
   const [deletedSkills, setDeletedSkills] = useState([]);
-  const updateLocal = (sid, f, v) => { setLocalGoals(p => { const n = {...p}; if (!n[sid]) n[sid] = {}; n[sid][f] = v; return n; }); };
-  const deleteLocal = (sid) => { setLocalGoals(p => { const n = {...p}; delete n[sid]; return n; }); setDeletedSkills(p => [...p, sid]); if (selSkill === sid) setSelSkill(null); };
+  const updateLocal = (sid, f, v) => { if (!canEdit) return; setLocalGoals(p => { const n = {...p}; if (!n[sid]) n[sid] = {}; n[sid][f] = v; return n; }); };
+  const deleteLocal = (sid) => { if (!canEdit) return; setLocalGoals(p => { const n = {...p}; delete n[sid]; return n; }); setDeletedSkills(p => [...p, sid]); if (selSkill === sid) setSelSkill(null); };
   const handleSave = async () => {
+    if (!canEdit) return;
     setSaving(true);
     try {
       for (const [sid, g] of Object.entries(localGoals)) { if (g.target) { await submitToForm(member.short, SKILLS[+sid], score(member, +sid), g.target, g.plan); await new Promise(r => setTimeout(r, 300)); } }
@@ -320,6 +322,11 @@ function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#64748b", fontSize: 20, cursor: "pointer" }}>✕</button>
         </div>
         <div style={{ padding: "16px 24px 24px" }}>
+          {!canEdit && <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 10, background: rater ? "#3a1e1e" : "#1e2a3a", border: `1px solid ${rater ? "#f8717140" : "#6366f140"}` }}>
+            {rater
+              ? <div style={{ fontSize: 12, color: "#fca5a5", lineHeight: 1.6 }}>🔒 これは <b style={{ color: "#fecaca" }}>{member.name}</b> さんの目標です（閲覧のみ）。編集できるのは自分（<b>{raterName}</b>）の目標だけです。</div>
+              : <div style={{ fontSize: 12, color: "#93c5fd", lineHeight: 1.6 }}>👤 編集するには、まず「自分が誰か」を選択してください。<button onClick={onRequestIdentity} style={{ marginLeft: 8, padding: "4px 10px", borderRadius: 6, border: "1px solid #6366f1", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>自分を選択</button></div>}
+          </div>}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>対象スキルを選択</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
@@ -344,15 +351,15 @@ function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill }) {
               {currentScore > 0 && <div style={{ padding: "8px 16px", borderBottom: "1px solid #1e1e30", fontSize: 11, color: "#64748b" }}><span style={{ color: "#94a3b8" }}>Lv{Math.round(currentScore)}：</span>{sk.levels[Math.round(currentScore)]}</div>}
               <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1e30" }}>
                 <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>🎯 6月末の目標レベル</div>
-                <div style={{ display: "flex", gap: 4 }}>{[1,2,3,4,5].map(v => { const c = cb(v); const isT = goalData.target === v; return <button key={v} onClick={() => updateLocal(selSkill, "target", v)} style={{ width: 36, height: 30, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", background: isT ? c.bg : "#0f0f1a", color: isT ? c.text : "#555", border: isT ? `2px solid ${c.text}` : "1px solid #2a2a3e", boxShadow: isT ? `0 0 12px ${c.text}30` : "none" }}>{v}</button>; })}</div>
+                <div style={{ display: "flex", gap: 4 }}>{[1,2,3,4,5].map(v => { const c = cb(v); const isT = goalData.target === v; return <button key={v} onClick={() => updateLocal(selSkill, "target", v)} disabled={!canEdit} style={{ width: 36, height: 30, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, cursor: canEdit ? "pointer" : "default", fontFamily: "inherit", background: isT ? c.bg : "#0f0f1a", color: isT ? c.text : "#555", border: isT ? `2px solid ${c.text}` : "1px solid #2a2a3e", boxShadow: isT ? `0 0 12px ${c.text}30` : "none" }}>{v}</button>; })}</div>
                 {goalData.target && <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6 }}>
                   <div style={{ fontSize: 11, color: cc(sk.cat) }}>Lv{goalData.target}：{sk.levels[goalData.target]}</div>
-                  <button onClick={() => deleteLocal(selSkill)} style={{ background: "none", border: "1px solid #f8717130", color: "#f87171", cursor: "pointer", fontSize: 10, padding: "2px 8px", borderRadius: 4, fontFamily: "inherit" }}>目標を削除</button>
+                  {canEdit && <button onClick={() => deleteLocal(selSkill)} style={{ background: "none", border: "1px solid #f8717130", color: "#f87171", cursor: "pointer", fontSize: 10, padding: "2px 8px", borderRadius: 4, fontFamily: "inherit" }}>目標を削除</button>}
                 </div>}
               </div>
               <div style={{ padding: "12px 16px" }}>
                 <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>💡 どうやって目標を達成しますか？</div>
-                <textarea value={goalData.plan || ""} onChange={e => updateLocal(selSkill, "plan", e.target.value)} placeholder={"例：\n・毎日Google公式ブログを読み、News AIにポストする\n・GASで業務自動化スクリプトを2本以上書く\n・ブランド担当者へのヒアリングに3回以上同席する"} style={{ width: "100%", minHeight: 80, background: "#0f0f1a", border: "1px solid #2a2a3e", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", lineHeight: 1.6, resize: "vertical", outline: "none" }} />
+                <textarea value={goalData.plan || ""} readOnly={!canEdit} onChange={e => updateLocal(selSkill, "plan", e.target.value)} placeholder={"例：\n・毎日Google公式ブログを読み、News AIにポストする\n・GASで業務自動化スクリプトを2本以上書く\n・ブランド担当者へのヒアリングに3回以上同席する"} style={{ width: "100%", minHeight: 80, background: "#0f0f1a", border: "1px solid #2a2a3e", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", lineHeight: 1.6, resize: "vertical", outline: "none" }} />
               </div>
             </div>
           )}
@@ -368,15 +375,15 @@ function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill }) {
                   {achieved ? <div style={{ fontSize: 9, color: "#4ade80", background: "#4ade8015", padding: "1px 5px", borderRadius: 3 }}>✓達成</div>
                     : gap > 0 && <div style={{ fontSize: 9, color: "#f59e0b", background: "#f59e0b15", padding: "1px 5px", borderRadius: 3 }}>+{gap.toFixed(1)}</div>}
                 </div>
-                <button onClick={() => deleteLocal(+sid)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12, padding: "2px 4px", lineHeight: 1 }}>✕</button>
+                {canEdit && <button onClick={() => deleteLocal(+sid)} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12, padding: "2px 4px", lineHeight: 1 }}>✕</button>}
               </div>); })}
           </div>}
-          <div style={{ marginTop: 20, display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
+          {canEdit && <div style={{ marginTop: 20, display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
             {saved && <span style={{ fontSize: 12, color: "#4ade80" }}>✓ 保存しました</span>}
             <button onClick={handleSave} disabled={saving} style={{ padding: "10px 28px", borderRadius: 8, border: "none", cursor: saving ? "wait" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", background: saved ? "#0f3a2e" : saving ? "#334155" : "#6366f1", color: saved ? "#4ade80" : "#fff", transition: "all .3s", boxShadow: saved ? "none" : "0 2px 12px rgba(99,102,241,.3)", opacity: saving ? 0.7 : 1 }}>
               {saving ? "⏳ 保存中..." : saved ? "✓ 保存済み" : "💾 保存する"}
             </button>
-          </div>
+          </div>}
         </div>
       </div>
     </div>
@@ -513,6 +520,7 @@ function App() {
   const [scoreMode, setScoreMode] = useState(false);
   const [rater, setRater] = useState(loadRater());
   const [identityPrompt, setIdentityPrompt] = useState(false);
+  const [identityNext, setIdentityNext] = useState("score");
   const [scorePanel, setScorePanel] = useState(null);
 
   const raterName = rater ? (MEMBERS.find(m => m.short === rater)?.name || rater) : null;
@@ -540,8 +548,8 @@ function App() {
   const refreshAll = async () => { setLoading(true); const [g, s] = await Promise.all([fetchGoals(), fetchScores()]); setGoals(g); setCsvScores(s); setLoading(false); };
 
   // スコア入力モード制御
-  const toggleScoreMode = () => { if (scoreMode) { setScoreMode(false); return; } if (!rater) { setIdentityPrompt(true); } else { setScoreMode(true); } };
-  const pickIdentity = (short) => { setRater(short); saveRater(short); setIdentityPrompt(false); setScoreMode(true); };
+  const toggleScoreMode = () => { if (scoreMode) { setScoreMode(false); return; } if (!rater) { setIdentityNext("score"); setIdentityPrompt(true); } else { setScoreMode(true); } };
+  const pickIdentity = (short) => { setRater(short); saveRater(short); setIdentityPrompt(false); if (identityNext === "score") setScoreMode(true); setIdentityNext(null); };
   const resetIdentity = () => { clearRater(); setRater(null); setScoreMode(false); };
   const applyScore = (target, skillId, r, level) => {
     setCsvScores(prev => {
@@ -567,7 +575,7 @@ function App() {
           <div>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 3, color: "#6366f1", textTransform: "uppercase" }}>AI Initiative Team</div>
             <h1 style={{ fontSize: 22, fontWeight: 700, margin: "2px 0 4px", color: "#f8fafc" }}>スキルマトリクス</h1>
-            <p style={{ fontSize: 11, color: scoreMode ? "#a5b4fc" : "#64748b", margin: "0 0 14px" }}>{scoreMode ? "スコア入力モード：メンバー×スキルのセルをクリックして点数を入力" : "メンバー名 or セルをクリック → 目標設定　|　全員で共有"}</p>
+            <p style={{ fontSize: 11, color: scoreMode ? "#a5b4fc" : "#64748b", margin: "0 0 14px" }}>{scoreMode ? "スコア入力モード：メンバー×スキルのセルをクリックして点数を入力" : "メンバー名 or セルをクリック → 目標を確認（編集できるのは自分の目標のみ）"}</p>
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
             {rater && <span style={{ fontSize: 10, color: "#94a3b8", background: "#1a1a2e", border: "1px solid #2a2a3e", borderRadius: 6, padding: "5px 8px" }}>入力者: <b style={{ color: "#e2e8f0" }}>{raterName}</b> <span onClick={resetIdentity} style={{ color: "#6366f1", cursor: "pointer", marginLeft: 4 }}>別の人として使う</span></span>}
@@ -676,7 +684,7 @@ function App() {
         {/* MANUAL */}
         {view === "manual" && <ManualView />}
       </div>
-      {goalPanel && <GoalPanel member={goalPanel.member} initialSkill={goalPanel.initialSkill} onClose={() => setGoalPanel(null)} goals={goals} setGoals={setGoals} score={score} />}
+      {goalPanel && <GoalPanel member={goalPanel.member} initialSkill={goalPanel.initialSkill} onClose={() => setGoalPanel(null)} goals={goals} setGoals={setGoals} score={score} rater={rater} raterName={raterName} onRequestIdentity={() => { setIdentityNext("goal"); setIdentityPrompt(true); }} />}
       {scorePanel && rater && <ScorePanel member={scorePanel.member} initialSkill={scorePanel.initialSkill} rater={rater} raterName={raterName} onClose={() => setScorePanel(null)} csvScores={csvScores} applyScore={applyScore} />}
       {identityPrompt && <IdentityPrompt onPick={pickIdentity} onClose={() => setIdentityPrompt(false)} />}
     </div>
