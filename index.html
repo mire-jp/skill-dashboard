@@ -163,6 +163,12 @@ function exportCSV(data, goals, scoreFn) {
 const Pill = ({ active, onClick, children, color }) => <button onClick={onClick} style={{ padding: "5px 12px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit", background: active ? (color || "#6366f1") : "transparent", color: active ? "#fff" : "#94a3b8" }}>{children}</button>;
 const Section = ({ title, children }) => <div style={{ marginBottom: 20 }}><div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", marginBottom: 8, borderBottom: "1px solid #2a2a3e", paddingBottom: 6 }}>{title}</div>{children}</div>;
 const P = ({ children }) => <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, margin: "0 0 8px" }}>{children}</p>;
+const LevelBar = ({ value, target }) => { const pct = v => (Math.max(0, Math.min(5, v||0))/5*100) + "%"; const col = (value ? cb(Math.round(value)).text : "#334155"); return (
+  <div style={{ position: "relative", height: 16, background: "#0f0f1a", borderRadius: 8, border: "1px solid #2a2a3e" }}>
+    <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pct(value), background: col, borderRadius: 8, transition: "width .2s" }} />
+    {[1,2,3,4].map(i => <div key={i} style={{ position: "absolute", left: (i/5*100)+"%", top: 0, bottom: 0, width: 1, background: "#2a2a3e" }} />)}
+    {target > 0 && <div style={{ position: "absolute", left: pct(target), top: -3, bottom: -3, width: 2, background: "#f59e0b", borderRadius: 1 }} />}
+  </div> ); };
 
 // ===== 本人識別プロンプト =====
 function IdentityPrompt({ onPick, onClose }) {
@@ -283,9 +289,11 @@ function ScorePanel({ member, initialSkill, rater, raterName, onClose, csvScores
 }
 
 // ===== Goal Panel =====
-function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill, rater, raterName, onRequestIdentity }) {
+function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill, rater, raterName, onRequestIdentity, csvScores, applyScore }) {
   const canEdit = rater === member.short;
   const [selSkill, setSelSkill] = useState(initialSkill ?? null);
+  const [selfLevel, setSelfLevel] = useState(null);
+  useEffect(() => { if (selSkill == null) { setSelfLevel(null); return; } const csv = csvScores?.[member.short]?.[selSkill]; setSelfLevel((csv && csv.self != null) ? csv.self : (member.self[selSkill] || null)); }, [selSkill, member.short]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [localGoals, setLocalGoals] = useState(() => JSON.parse(JSON.stringify(goals[member.short] || {})));
@@ -296,6 +304,7 @@ function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill, rate
     if (!canEdit) return;
     setSaving(true);
     try {
+      if (selSkill != null && selfLevel) { await submitScore(member.short, SKILLS[selSkill], member.short, selfLevel); if (applyScore) applyScore(member.short, selSkill, member.short, selfLevel); await new Promise(r => setTimeout(r, 300)); }
       for (const [sid, g] of Object.entries(localGoals)) { if (g.target) { await submitToForm(member.short, SKILLS[+sid], score(member, +sid), g.target, g.plan); await new Promise(r => setTimeout(r, 300)); } }
       for (const sid of deletedSkills) { await submitToForm(member.short, SKILLS[sid], 0, 0, ""); await new Promise(r => setTimeout(r, 300)); }
       const next = { ...goals }; next[member.short] = { ...localGoals };
@@ -343,12 +352,18 @@ function GoalPanel({ member, onClose, goals, setGoals, score, initialSkill, rate
                 </div>
                 <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6, margin: 0 }}>{sk.desc}</p>
               </div>
-              <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1e30", display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontSize: 11, color: "#64748b", width: 70 }}>現在レベル</span>
-                <div style={{ display: "flex", gap: 4 }}>{[1,2,3,4,5].map(v => { const c = cb(v); const cur = currentScore && Math.round(currentScore) === v; return <div key={v} style={{ width: 36, height: 30, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, background: cur ? c.bg : "#0f0f1a", color: cur ? c.text : "#333", border: cur ? `2px solid ${c.text}` : "1px solid #1e1e30" }}>{v}</div>; })}</div>
-                <span style={{ fontSize: 11, color: "#94a3b8" }}>総合 {fmt(currentScore)}</span>
+              <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1e30" }}>
+                <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>📝 自己評価（現在のレベル）</div>
+                <div style={{ display: "flex", gap: 6 }}>{[1,2,3,4,5].map(v => { const c = cb(v); const on = selfLevel === v; return <button key={v} onClick={() => setSelfLevel(v)} style={{ flex: 1, height: 40, borderRadius: 7, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer", fontFamily: "inherit", background: on ? c.bg : "#0f0f1a", color: on ? c.text : "#555", border: on ? `2px solid ${c.text}` : "1px solid #2a2a3e", boxShadow: on ? `0 0 12px ${c.text}30` : "none" }}><span style={{ fontSize: 15, fontWeight: 700 }}>{v}</span><span style={{ fontSize: 8 }}>{LEVELS[v]}</span></button>; })}</div>
+                <div style={{ marginTop: 12 }}>
+                  <LevelBar value={selfLevel || 0} target={goalData.target || 0} />
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5, fontSize: 10, color: "#64748b" }}>
+                    <span>現在 <b style={{ color: selfLevel ? cb(selfLevel).text : "#64748b" }}>Lv{selfLevel || "—"}</b></span>
+                    <span>🎯 目標 <b style={{ color: goalData.target ? "#f59e0b" : "#64748b" }}>Lv{goalData.target || "—"}</b></span>
+                  </div>
+                </div>
+                {selfLevel ? <div style={{ marginTop: 8, fontSize: 11, color: cc(sk.cat) }}>Lv{selfLevel}：{sk.levels[selfLevel]}</div> : null}
               </div>
-              {currentScore > 0 && <div style={{ padding: "8px 16px", borderBottom: "1px solid #1e1e30", fontSize: 11, color: "#64748b" }}><span style={{ color: "#94a3b8" }}>Lv{Math.round(currentScore)}：</span>{sk.levels[Math.round(currentScore)]}</div>}
               <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e1e30" }}>
                 <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>🎯 6月末の目標レベル</div>
                 <div style={{ display: "flex", gap: 4 }}>{[1,2,3,4,5].map(v => { const c = cb(v); const isT = goalData.target === v; return <button key={v} onClick={() => updateLocal(selSkill, "target", v)} disabled={!canEdit} style={{ width: 36, height: 30, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, cursor: canEdit ? "pointer" : "default", fontFamily: "inherit", background: isT ? c.bg : "#0f0f1a", color: isT ? c.text : "#555", border: isT ? `2px solid ${c.text}` : "1px solid #2a2a3e", boxShadow: isT ? `0 0 12px ${c.text}30` : "none" }}>{v}</button>; })}</div>
@@ -517,10 +532,8 @@ function App() {
 
   // スコア関連の状態
   const [csvScores, setCsvScores] = useState({});
-  const [scoreMode, setScoreMode] = useState(false);
   const [rater, setRater] = useState(loadRater());
   const [identityPrompt, setIdentityPrompt] = useState(false);
-  const [identityNext, setIdentityNext] = useState("score");
   const [scorePanel, setScorePanel] = useState(null);
 
   const raterName = rater ? (MEMBERS.find(m => m.short === rater)?.name || rater) : null;
@@ -543,14 +556,14 @@ function App() {
   useEffect(() => {
     fetchGoals().then(g => { setGoals(g); setLoading(false); });
     fetchScores().then(setCsvScores);
+    if (!loadRater()) setIdentityPrompt(true);
   }, []);
 
   const refreshAll = async () => { setLoading(true); const [g, s] = await Promise.all([fetchGoals(), fetchScores()]); setGoals(g); setCsvScores(s); setLoading(false); };
 
   // スコア入力モード制御
-  const toggleScoreMode = () => { if (scoreMode) { setScoreMode(false); return; } if (!rater) { setIdentityNext("score"); setIdentityPrompt(true); } else { setScoreMode(true); } };
-  const pickIdentity = (short) => { setRater(short); saveRater(short); setIdentityPrompt(false); if (identityNext === "score") setScoreMode(true); setIdentityNext(null); };
-  const resetIdentity = () => { clearRater(); setRater(null); setScoreMode(false); };
+  const pickIdentity = (short) => { setRater(short); saveRater(short); setIdentityPrompt(false); };
+  const resetIdentity = () => { clearRater(); setRater(null); };
   const applyScore = (target, skillId, r, level) => {
     setCsvScores(prev => {
       const next = { ...prev };
@@ -562,7 +575,7 @@ function App() {
     });
   };
   // クリック時のルーティング（モードで分岐）
-  const openCell = (m, skillId = null) => { if (scoreMode) setScorePanel({ member: m, initialSkill: skillId }); else setGoalPanel({ member: m, initialSkill: skillId ?? undefined }); };
+  const openCell = (m, skillId = null) => { if (!rater) { setIdentityPrompt(true); return; } if (m.short === rater) setGoalPanel({ member: m, initialSkill: skillId ?? undefined }); else setScorePanel({ member: m, initialSkill: skillId ?? undefined }); };
 
   const GoalDot = ({ member }) => { const c = Object.keys(goals[member.short]||{}).filter(k => goals[member.short][k]?.target).length; return c ? <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 3, background: "#f59e0b", marginLeft: 4, verticalAlign: "middle" }} title={`${c}件`} /> : null; };
   const Mode = ({ k, l }) => <button onClick={() => setMode(k)} style={{ padding: "4px 10px", borderRadius: 5, border: "none", cursor: "pointer", fontSize: 10, fontWeight: 600, fontFamily: "inherit", background: mode === k ? "#334155" : "transparent", color: mode === k ? "#e2e8f0" : "#64748b" }}>{l}</button>;
@@ -575,11 +588,10 @@ function App() {
           <div>
             <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 3, color: "#6366f1", textTransform: "uppercase" }}>AI Initiative Team</div>
             <h1 style={{ fontSize: 22, fontWeight: 700, margin: "2px 0 4px", color: "#f8fafc" }}>スキルマトリクス</h1>
-            <p style={{ fontSize: 11, color: scoreMode ? "#a5b4fc" : "#64748b", margin: "0 0 14px" }}>{scoreMode ? "スコア入力モード：メンバー×スキルのセルをクリックして点数を入力" : "メンバー名 or セルをクリック → 目標を確認（編集できるのは自分の目標のみ）"}</p>
+            <p style={{ fontSize: 11, color: "#64748b", margin: "0 0 14px" }}>上段＝あなたの自己評価＆目標／下段＝メンバーへの他者評価。セルをクリックして入力します。</p>
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
-            {rater && <span style={{ fontSize: 10, color: "#94a3b8", background: "#1a1a2e", border: "1px solid #2a2a3e", borderRadius: 6, padding: "5px 8px" }}>入力者: <b style={{ color: "#e2e8f0" }}>{raterName}</b> <span onClick={resetIdentity} style={{ color: "#6366f1", cursor: "pointer", marginLeft: 4 }}>別の人として使う</span></span>}
-            <button onClick={toggleScoreMode} style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${scoreMode ? "#6366f1" : "#2a2a3e"}`, background: scoreMode ? "#6366f1" : "#1a1a2e", color: scoreMode ? "#fff" : "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>{scoreMode ? "✏️ スコア入力中（終了）" : "✏️ スコア入力"}</button>
+            {rater ? <span style={{ fontSize: 10, color: "#94a3b8", background: "#1a1a2e", border: "1px solid #2a2a3e", borderRadius: 6, padding: "5px 8px" }}>入力者: <b style={{ color: "#e2e8f0" }}>{raterName}</b> <span onClick={resetIdentity} style={{ color: "#6366f1", cursor: "pointer", marginLeft: 4 }}>別の人として使う</span></span> : <button onClick={() => setIdentityPrompt(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #6366f1", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>🙋 あなたを選択</button>}
             <button onClick={() => exportCSV(data, goals, score)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #2a2a3e", background: "#1a1a2e", color: "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>📥 CSV</button>
             <button onClick={refreshAll} disabled={loading} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #2a2a3e", background: "#1a1a2e", color: loading ? "#64748b" : "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>{loading ? "読込中..." : "🔄 再読込"}</button>
           </div>
@@ -596,36 +608,52 @@ function App() {
           </div>}
         </div>
 
-        {/* HEATMAP */}
-        {view === "heatmap" && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ borderCollapse: "separate", borderSpacing: 2, width: "100%" }}>
-              <thead><tr><th style={{ width: 120 }} />{SKILLS.map(sk => <th key={sk.id} onClick={() => setSkill(skill === sk.id ? null : sk.id)} style={{ padding: "4px 2px", fontSize: 9, color: skill === sk.id ? "#f8fafc" : "#94a3b8", cursor: "pointer", textAlign: "center", writingMode: "vertical-rl", height: 68, background: skill === sk.id ? "#6366f115" : "transparent", borderRadius: 3, borderBottom: `2px solid ${cc(sk.cat)}30` }}>{sk.short}</th>)}</tr></thead>
-              <tbody>{data.map((m, mi) => (
-                <tr key={mi}>
-                  <td style={{ padding: "3px 5px", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer" }} onClick={() => openCell(m)}>
-                    <span style={{ color: "#f8fafc", borderBottom: "1px dashed #334155" }}>{m.short}</span><GoalDot member={m} />
-                    <span style={{ fontSize: 9, color: "#64748b", marginLeft: 4 }}>{m.role}</span>
-                  </td>
-                  {SKILLS.map((_, si) => { const v = score(m, si), c = cb(v), h = hov?.m === mi && hov?.s === si, g = goals[m.short]?.[si]?.target; return (
-                    <td key={si} onMouseEnter={() => setHov({m:mi,s:si})} onMouseLeave={() => setHov(null)} onClick={() => openCell(m, si)}
-                      style={{ textAlign: "center", padding: "4px 1px", fontSize: 11, fontWeight: 700, background: c.bg, color: c.text, borderRadius: 3, border: scoreMode ? "1px solid #6366f180" : (g ? "1px solid #f59e0b50" : `1px solid ${c.bd}`), position: "relative", transform: h ? "scale(1.15)" : "scale(1)", zIndex: h ? 10 : 1, transition: "all .1s", boxShadow: h ? `0 0 10px ${c.text}30` : "none", cursor: "pointer" }}>
-                      {fmt(v)}{g && <div style={{ position: "absolute", top: -2, right: -2, width: 5, height: 5, borderRadius: 3, background: "#f59e0b" }} />}
-                      {h && v && <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)", background: "#1e293b", border: "1px solid #334155", borderRadius: 5, padding: "5px 9px", fontSize: 10, whiteSpace: "nowrap", color: "#e2e8f0", zIndex: 100, boxShadow: "0 4px 12px rgba(0,0,0,.6)" }}>
-                        <div style={{ fontWeight: 700, marginBottom: 2 }}>{SKILLS[si].short}</div>
-                        <div>自己: {m.self[si]||"—"} | 他者: {m.peer[si]!=null?m.peer[si].toFixed(1):"—"}</div>
-                        {g && <div style={{ color: "#f59e0b", marginTop: 2 }}>🎯 目標: Lv{g}</div>}
-                        {scoreMode && <div style={{ color: "#a5b4fc", marginTop: 2 }}>クリックで入力</div>}
-                      </div>}
-                    </td>); })}
-                </tr>))}</tbody>
-            </table>
-            <div style={{ display: "flex", gap: 10, marginTop: 10, justifyContent: "center", flexWrap: "wrap" }}>
+        {/* HEATMAP : 上段=自分 / 下段=メンバー */}
+        {view === "heatmap" && (() => {
+          const me = rater ? data.find(m => m.short === rater) : null;
+          const others = data.filter(m => !rater || m.short !== rater);
+          const SkillHead = () => <thead><tr><th style={{ width: 92 }} />{SKILLS.map(sk => <th key={sk.id} onClick={() => setSkill(skill === sk.id ? null : sk.id)} style={{ padding: "4px 2px", fontSize: 9, color: skill === sk.id ? "#f8fafc" : "#94a3b8", cursor: "pointer", textAlign: "center", writingMode: "vertical-rl", height: 64, background: skill === sk.id ? "#6366f115" : "transparent", borderRadius: 3, borderBottom: `2px solid ${cc(sk.cat)}30` }}>{sk.short}</th>)}</tr></thead>;
+          const Row = ({ m, useSelf, accent }) => (
+            <tr>
+              <td style={{ padding: "3px 5px", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", cursor: "pointer" }} onClick={() => openCell(m)}>
+                <span style={{ color: "#f8fafc", borderBottom: "1px dashed #334155" }}>{m.short}</span><GoalDot member={m} />
+                <span style={{ fontSize: 9, color: "#64748b", marginLeft: 4 }}>{m.role}</span>
+              </td>
+              {SKILLS.map((_, si) => { const v = useSelf ? (m.self[si] || null) : score(m, si); const c = cb(v); const h = hov?.ms === m.short && hov?.s === si; const g = goals[m.short]?.[si]?.target; return (
+                <td key={si} onMouseEnter={() => setHov({ ms: m.short, s: si })} onMouseLeave={() => setHov(null)} onClick={() => openCell(m, si)}
+                  style={{ textAlign: "center", padding: "4px 1px", fontSize: 11, fontWeight: 700, background: c.bg, color: c.text, borderRadius: 3, border: `1px solid ${accent ? accent : (g ? "#f59e0b50" : c.bd)}`, position: "relative", transform: h ? "scale(1.15)" : "scale(1)", zIndex: h ? 10 : 1, transition: "all .1s", boxShadow: h ? `0 0 10px ${c.text}30` : "none", cursor: "pointer" }}>
+                  {fmt(v)}{g && <div style={{ position: "absolute", top: -2, right: -2, width: 5, height: 5, borderRadius: 3, background: "#f59e0b" }} />}
+                  {h && <div style={{ position: "absolute", bottom: "calc(100% + 4px)", left: "50%", transform: "translateX(-50%)", background: "#1e293b", border: "1px solid #334155", borderRadius: 5, padding: "5px 9px", fontSize: 10, whiteSpace: "nowrap", color: "#e2e8f0", zIndex: 100, boxShadow: "0 4px 12px rgba(0,0,0,.6)" }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>{SKILLS[si].short}</div>
+                    <div>自己: {m.self[si]||"—"} | 他者: {m.peer[si]!=null?m.peer[si].toFixed(1):"—"}</div>
+                    {g && <div style={{ color: "#f59e0b", marginTop: 2 }}>🎯 目標: Lv{g}</div>}
+                    <div style={{ color: "#a5b4fc", marginTop: 2 }}>クリックで入力</div>
+                  </div>}
+                </td>); })}
+            </tr>
+          );
+          return (
+          <div>
+            {!rater && <div style={{ marginBottom: 14, padding: "12px 14px", borderRadius: 10, background: "#1e2a3a", border: "1px solid #6366f140", fontSize: 12, color: "#93c5fd" }}>👤 まず「あなたは誰か」を選ぶと、上段にあなた専用の入力欄（自己評価＆目標）が出ます。<button onClick={() => setIdentityPrompt(true)} style={{ marginLeft: 8, padding: "4px 10px", borderRadius: 6, border: "1px solid #6366f1", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>あなたを選択</button></div>}
+            {me && <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#a5b4fc", marginBottom: 6 }}>🙋 あなたのスキル（自己評価＆目標）</div>
+              <div style={{ overflowX: "auto", border: "1px solid #6366f140", borderRadius: 10, padding: 8, background: "#12121f" }}>
+                <table style={{ borderCollapse: "separate", borderSpacing: 2, width: "100%" }}><SkillHead /><tbody><Row m={me} useSelf={true} accent="#6366f180" /></tbody></table>
+              </div>
+            </div>}
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#6ee7b7", marginBottom: 6 }}>👥 チームメンバー（他者評価を入力）</div>
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ borderCollapse: "separate", borderSpacing: 2, width: "100%" }}><SkillHead /><tbody>{others.map(m => <Row key={m.short} m={m} useSelf={false} />)}</tbody></table>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "center", flexWrap: "wrap" }}>
               {[1,2,3,4,5].map(v => <div key={v} style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 15, height: 15, borderRadius: 2, ...(() => { const c = cb(v); return { background: c.bg, border: `1px solid ${c.bd}`, color: c.text }; })(), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700 }}>{v}</div><span style={{ fontSize: 9, color: "#94a3b8" }}>{LEVELS[v]}</span></div>)}
               <div style={{ display: "flex", alignItems: "center", gap: 3 }}><div style={{ width: 6, height: 6, borderRadius: 3, background: "#f59e0b" }} /><span style={{ fontSize: 9, color: "#94a3b8" }}>目標設定済み</span></div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* ASSIGN */}
         {view === "assign" && (() => { const ranked = skill != null ? data.map(m => ({...m, sc: score(m, skill)})).filter(m => m.sc > 0).sort((a, b) => b.sc - a.sc) : []; return (
@@ -684,7 +712,7 @@ function App() {
         {/* MANUAL */}
         {view === "manual" && <ManualView />}
       </div>
-      {goalPanel && <GoalPanel member={goalPanel.member} initialSkill={goalPanel.initialSkill} onClose={() => setGoalPanel(null)} goals={goals} setGoals={setGoals} score={score} rater={rater} raterName={raterName} onRequestIdentity={() => { setIdentityNext("goal"); setIdentityPrompt(true); }} />}
+      {goalPanel && <GoalPanel member={goalPanel.member} initialSkill={goalPanel.initialSkill} onClose={() => setGoalPanel(null)} goals={goals} setGoals={setGoals} score={score} rater={rater} raterName={raterName} csvScores={csvScores} applyScore={applyScore} onRequestIdentity={() => setIdentityPrompt(true)} />}
       {scorePanel && rater && <ScorePanel member={scorePanel.member} initialSkill={scorePanel.initialSkill} rater={rater} raterName={raterName} onClose={() => setScorePanel(null)} csvScores={csvScores} applyScore={applyScore} />}
       {identityPrompt && <IdentityPrompt onPick={pickIdentity} onClose={() => setIdentityPrompt(false)} />}
     </div>
