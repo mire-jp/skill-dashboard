@@ -202,16 +202,39 @@ async function submitProfile(short, p) {
   await fetch(PROFILE_FORM_URL, { method: "POST", body, mode: "no-cors" });
 }
 
-// ===== CSV Export =====
-function exportCSV(data, goals, scoreFn) {
-  let csv = "メンバー,役職,スキル,カテゴリ,自己評価,他者平均,総合,目標レベル,アクションプラン\n";
-  data.forEach(m => SKILLS.forEach((sk, si) => {
-    const g = goals[m.short]?.[si] || {};
-    csv += `"${m.name}","${m.role}","${sk.name}","${CATS.find(c=>c.key===sk.cat)?.label}",${m.self[si]||""},${m.peer[si]!=null?m.peer[si]:""},${scoreFn(m,si)||""},${g.target||""},"${(g.plan||"").replace(/"/g,'""')}"\n`;
-  }));
-  const blob = new Blob(["\uFEFF"+csv], { type: "text/csv;charset=utf-8" });
+// ===== CSV Export（横持ち：1行＝メンバー。Notion DB列名に完全一致） =====
+const PERIOD_KEY = "skillmatrix_period_v1";
+// スキル列の見出し＝Notion既存DBの列名に完全一致（ダッシュボード内部名とは別）
+const NOTION_SKILL_COLS = [
+  "1. AIクリエイティブツール", "2. AIエージェント設計・構築", "3. AI実装・運用",
+  "4. コーディング / アプリケーション開発", "5. 外部データ連携設計", "6. 業務ワークフロー設計",
+  "7. 研修・ガイド資料作成", "8. プロジェクトマネジメント", "9. ヒアリング・要件整理・提案",
+  "10. 生産", "11. 企画", "12. 販売", "13. 経営＆管理",
+];
+const csvCell = (s) => '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"';
+function exportCSV(data, profiles) {
+  let period = "69期1Q";
+  try { period = localStorage.getItem(PERIOD_KEY) || period; } catch {}
+  const input = window.prompt("どの期のスナップショットですか？（例：69期1Q）", period);
+  if (input == null) return; // キャンセル
+  period = input.trim() || period;
+  try { localStorage.setItem(PERIOD_KEY, period); } catch {}
+
+  const header = ["メンバー名", "期", "最新", "役職・ポジション", "担当エリア", "担当ブランド・部署", "周辺知識・経験", "備考", ...NOTION_SKILL_COLS];
+  let csv = header.map(csvCell).join(",") + "\n";
+  data.forEach(m => {
+    const p = profiles[m.short] || {};
+    const text = [m.name, period, "最新", p.role || "", p.area || "", p.brand || "", p.knowledge || "", p.note || ""].map(csvCell);
+    const combos = SKILLS.map((_, i) => {
+      const s = m.self[i], pe = m.peer[i];
+      const v = (s != null && pe != null) ? +((s + pe) / 2).toFixed(1) : (s != null ? s : (pe != null ? pe : null));
+      return v == null ? "" : (Number.isInteger(v) ? String(v) : v.toFixed(1)); // 総合（数値・小数あり）
+    });
+    csv += text.concat(combos).join(",") + "\n";
+  });
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `skill_matrix_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  a.download = `skill_matrix_${period}_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
 }
 
 // ===== Shared UI =====
@@ -753,7 +776,7 @@ function App() {
           </div>
           <div style={{ display: "flex", gap: 6, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
             {rater ? <span style={{ fontSize: 10, color: "#94a3b8", background: "#1a1a2e", border: "1px solid #2a2a3e", borderRadius: 6, padding: "5px 8px" }}>入力者: <b style={{ color: "#e2e8f0" }}>{raterName}</b> <span onClick={resetIdentity} style={{ color: "#6366f1", cursor: "pointer", marginLeft: 4 }}>別の人として使う</span></span> : <button onClick={() => setIdentityPrompt(true)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #6366f1", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>🙋 あなたを選択</button>}
-            <button onClick={() => exportCSV(data, goals, score)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #2a2a3e", background: "#1a1a2e", color: "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>📥 CSV</button>
+            <button onClick={() => exportCSV(data, profiles)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #2a2a3e", background: "#1a1a2e", color: "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>📥 CSV</button>
             <button onClick={refreshAll} disabled={loading} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #2a2a3e", background: "#1a1a2e", color: loading ? "#64748b" : "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>{loading ? "読込中..." : "🔄 再読込"}</button>
           </div>
         </div>
