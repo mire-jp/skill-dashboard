@@ -593,13 +593,18 @@ function ManualView() {
 }
 
 // ===== 補足情報入力 Tab =====
+// 担当エリア／担当ブランド・部署の選択肢（Notion既存マルチセレクトと完全一致）
+const AREA_OPTIONS = ["チームビルド", "コンテンツ発信", "研修", "データテック", "システム", "クリエイティブ"];
+const BRAND_OPTIONS = ["人事（研修）", "ワールドブランズ", "F3", "生産指導部", "FCL", "DCX", "IR・グループコミュニケーション室", "法務・品質統制部", "人事（労務）", "システムソリューション", "all new mart", "& Bridge", "ASPLUND", "CODE A", "GALLEST", "cloenc", "index", "ITS DEMO", "adabat", "UNTITLED", "tk. TAKEO KIKUCHI"];
+const splitVals = (s) => (s || "").split(",").map(x => x.trim()).filter(Boolean);
+
 function ProfileView({ profiles, rater, raterName, onRequestIdentity, applyProfile }) {
   const FIELDS = [
-    { key: "role", label: "役職・ポジション", ph: "例：PMO / デザイナー / インターン", multiline: false },
-    { key: "area", label: "担当エリア", ph: "複数はカンマ区切り（例：研修, クリエイティブ）", multiline: false },
-    { key: "brand", label: "担当ブランド・部署", ph: "複数はカンマ区切り（例：ASPLUND, FCL）", multiline: false },
-    { key: "knowledge", label: "周辺知識・経験", ph: "業界経験・得意領域・前職など", multiline: true },
-    { key: "note", label: "備考", ph: "その他、共有しておきたいこと", multiline: true },
+    { key: "role", label: "役職・ポジション", type: "text", ph: "例：PMO / デザイナー / インターン" },
+    { key: "area", label: "担当エリア", type: "multi", opts: AREA_OPTIONS },
+    { key: "brand", label: "担当ブランド・部署", type: "multi", opts: BRAND_OPTIONS },
+    { key: "knowledge", label: "周辺知識・経験", type: "textarea", ph: "業界経験・得意領域・前職など" },
+    { key: "note", label: "備考", type: "textarea", ph: "その他、共有しておきたいこと" },
   ];
   const [form, setForm] = useState({});
   const [dirty, setDirty] = useState(false);
@@ -608,6 +613,7 @@ function ProfileView({ profiles, rater, raterName, onRequestIdentity, applyProfi
   useEffect(() => { setForm({ ...(profiles[rater] || {}) }); setDirty(false); }, [rater]);
   useEffect(() => { setForm(f => dirty ? f : { ...(profiles[rater] || {}) }); }, [profiles]);
   const upd = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); setSaved(false); };
+  const toggleChip = (k, opt) => { const cur = splitVals(form[k]); const next = cur.includes(opt) ? cur.filter(x => x !== opt) : [...cur, opt]; upd(k, next.join(", ")); };
   const handleSave = async () => {
     if (!rater) return;
     setSaving(true);
@@ -635,8 +641,14 @@ function ProfileView({ profiles, rater, raterName, onRequestIdentity, applyProfi
         <div style={{ padding: "16px 18px" }}>
           {FIELDS.map(f => (
             <div key={f.key} style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 5, fontWeight: 600 }}>{f.label}</div>
-              {f.multiline
+              <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 5, fontWeight: 600 }}>{f.label}{f.type === "multi" && <span style={{ color: "#475569", fontWeight: 400 }}>（複数選択可）</span>}</div>
+              {f.type === "multi"
+                ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {f.opts.map(opt => { const on = splitVals(form[f.key]).includes(opt); return (
+                      <button key={opt} onClick={() => toggleChip(f.key, opt)} style={{ padding: "5px 11px", borderRadius: 14, border: `1px solid ${on ? "#6366f1" : "#2a2a3e"}`, background: on ? "#6366f120" : "#1a1a2e", color: on ? "#a5b4fc" : "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 500 }}>{on ? "✓ " : ""}{opt}</button>
+                    ); })}
+                  </div>
+                : f.type === "textarea"
                 ? <textarea value={form[f.key] || ""} onChange={e => upd(f.key, e.target.value)} placeholder={f.ph} style={{ width: "100%", minHeight: 70, background: "#0f0f1a", border: "1px solid #2a2a3e", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", lineHeight: 1.6, resize: "vertical", outline: "none" }} />
                 : <input value={form[f.key] || ""} onChange={e => upd(f.key, e.target.value)} placeholder={f.ph} style={{ width: "100%", background: "#0f0f1a", border: "1px solid #2a2a3e", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />}
             </div>
