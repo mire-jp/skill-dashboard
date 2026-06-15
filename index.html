@@ -655,9 +655,9 @@ function App() {
           <div>
             {!rater && <div style={{ marginBottom: 14, padding: "12px 14px", borderRadius: 10, background: "#1e2a3a", border: "1px solid #6366f140", fontSize: 12, color: "#93c5fd" }}>👤 まず「あなたは誰か」を選ぶと、上段にあなた専用の入力欄（自己評価＆目標）が出ます。<button onClick={() => setIdentityPrompt(true)} style={{ marginLeft: 8, padding: "4px 10px", borderRadius: 6, border: "1px solid #6366f1", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 11, fontFamily: "inherit", fontWeight: 600 }}>あなたを選択</button></div>}
             {me && <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#a5b4fc", marginBottom: 6 }}>🙋 あなたのスキル（自己評価＆目標）</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#a5b4fc", marginBottom: 6 }}>🙋 あなたのスキル（{mode === "self" ? "自己評価" : mode === "peer" ? "他者評価" : "総合"}＆目標）</div>
               <div style={{ overflowX: "auto", border: "1px solid #6366f140", borderRadius: 10, padding: 8, background: "#12121f" }}>
-                <table style={{ borderCollapse: "separate", borderSpacing: 2, width: "100%" }}><SkillHead /><tbody><Row m={me} useSelf={true} accent="#6366f180" /></tbody></table>
+                <table style={{ borderCollapse: "separate", borderSpacing: 2, width: "100%" }}><SkillHead /><tbody><Row m={me} useSelf={false} accent="#6366f180" /></tbody></table>
               </div>
             </div>}
             <div>
