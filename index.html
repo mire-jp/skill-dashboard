@@ -27,6 +27,11 @@ const SCORE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLScZ46KjLtQW9mx5
 const SCORE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ1mVZMAQudjR6DFNtiVh32MUedK-d0Gf03IDF0__GfF-1QSP8dOYjFnTVJ_amagG0rRJJIqUPSE304/pub?gid=1458775073&single=true&output=csv";
 const SCORE_ENTRY = { target: "entry.1248906474", skill: "entry.395951534", rater: "entry.349258662", level: "entry.507215009" };
 
+// ===== Config (補足情報：新規 / スコアと同じスプシの別タブ gid=1466406667) =====
+const PROFILE_FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSdQVItibLAcnTW0G7v3gK7Gj5fN78xH9B0NKVYfLjbOGl4yIg/formResponse";
+const PROFILE_CSV = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ1mVZMAQudjR6DFNtiVh32MUedK-d0Gf03IDF0__GfF-1QSP8dOYjFnTVJ_amagG0rRJJIqUPSE304/pub?gid=1466406667&single=true&output=csv";
+const PROFILE_ENTRY = { target: "entry.130012824", role: "entry.1131687106", area: "entry.439286697", brand: "entry.285681697", knowledge: "entry.1134053896", note: "entry.1264395410" };
+
 // ===== 本人識別（localStorage / try-catchで保護。プレビューでは非永続） =====
 const RATER_KEY = "skillmatrix_rater_v1";
 const loadRater = () => { try { return localStorage.getItem(RATER_KEY) || null; } catch { return null; } };
@@ -145,6 +150,56 @@ async function submitScore(targetShort, skill, raterShort, level) {
   body.append(SCORE_ENTRY.rater, FORM_MEMBER_NAMES[raterShort] || raterShort);
   body.append(SCORE_ENTRY.level, String(level)); // 半角でPOST（このフォームは半角で作成済み）
   await fetch(SCORE_FORM_URL, { method: "POST", body, mode: "no-cors" });
+}
+
+// ===== Google Sheet（補足情報：新規） =====
+// クオート対応CSVパーサ（自由記述に含まれるカンマ・改行・"" を正しく処理）
+function parseCSVRows(text) {
+  const rows = []; let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === ',') { row.push(field); field = ""; }
+      else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; }
+      else if (ch === '\r') { /* skip CR */ }
+      else field += ch;
+    }
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+// 列順: [タイムスタンプ, 被評価者, 役職・ポジション, 担当エリア, 担当ブランド・部署, 周辺知識・経験, 備考]
+// 返り値: { [メンバーshort]: { role, area, brand, knowledge, note } } ＝ メンバーごと最新行
+function parseProfileCSV(text) {
+  const out = {};
+  const rows = parseCSVRows(text);
+  if (rows.length < 2) return out;
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
+    if (!cols || cols.length < 2) continue;
+    const ms = MEMBER_ALIASES[(cols[1] || "").trim()] || (cols[1] || "").trim();
+    if (!ms) continue;
+    out[ms] = {
+      role: (cols[2] || "").trim(), area: (cols[3] || "").trim(), brand: (cols[4] || "").trim(),
+      knowledge: (cols[5] || "").trim(), note: (cols[6] || "").trim(),
+    }; // 後の行で上書き＝最新行採用
+  }
+  return out;
+}
+async function fetchProfiles() { try { const r = await fetch(PROFILE_CSV + "&t=" + Date.now()); return parseProfileCSV(await r.text()); } catch { return {}; } }
+async function submitProfile(short, p) {
+  const body = new URLSearchParams();
+  body.append(PROFILE_ENTRY.target, FORM_MEMBER_NAMES[short] || short);
+  body.append(PROFILE_ENTRY.role, p.role || "");
+  body.append(PROFILE_ENTRY.area, p.area || "");
+  body.append(PROFILE_ENTRY.brand, p.brand || "");
+  body.append(PROFILE_ENTRY.knowledge, p.knowledge || "");
+  body.append(PROFILE_ENTRY.note, p.note || "");
+  await fetch(PROFILE_FORM_URL, { method: "POST", body, mode: "no-cors" });
 }
 
 // ===== CSV Export =====
@@ -472,9 +527,7 @@ function ManualView() {
           </Section>
           <Section title="🗂 タブの説明">
             <P><b style={{color:"#e2e8f0"}}>ヒートマップ</b> — 8名×13スキルの一覧。セルをクリックして入力します（自分のセル＝自己評価＆目標、メンバーのセル＝他者評価）。</P>
-            <P><b style={{color:"#e2e8f0"}}>アサイン検索</b> — スキルを選ぶと、そのスキルに強いメンバーを推奨順で表示。「このタスク誰に振る？」の即答用。</P>
-            <P><b style={{color:"#e2e8f0"}}>メンバー別</b> — 各メンバーのスキルプロフィールをバーチャートで表示。上段=自己評価、下段=他者評価、黄色線=目標。</P>
-            <P><b style={{color:"#e2e8f0"}}>ギャップ分析</b> — チーム全体のスキルカバレッジと弱点を表示。「充足/やや不足/要強化」で分類。</P>
+            <P><b style={{color:"#e2e8f0"}}>補足情報入力</b> — 役職・担当エリア・担当ブランド・周辺知識などを入力します（自分の分のみ編集）。AIがチーム編成やタスク割り当ての参考にします。</P>
             <P><b style={{color:"#e2e8f0"}}>スキル定義</b> — 13スキル全てのレベル定義（1〜5）を確認できる。</P>
             <P><b style={{color:"#e2e8f0"}}>マニュアル</b> — このページ。</P>
           </Section>
@@ -539,6 +592,80 @@ function ManualView() {
   );
 }
 
+// ===== 補足情報入力 Tab =====
+function ProfileView({ profiles, rater, raterName, onRequestIdentity, applyProfile }) {
+  const FIELDS = [
+    { key: "role", label: "役職・ポジション", ph: "例：PMO / デザイナー / インターン", multiline: false },
+    { key: "area", label: "担当エリア", ph: "複数はカンマ区切り（例：研修, クリエイティブ）", multiline: false },
+    { key: "brand", label: "担当ブランド・部署", ph: "複数はカンマ区切り（例：ASPLUND, FCL）", multiline: false },
+    { key: "knowledge", label: "周辺知識・経験", ph: "業界経験・得意領域・前職など", multiline: true },
+    { key: "note", label: "備考", ph: "その他、共有しておきたいこと", multiline: true },
+  ];
+  const [form, setForm] = useState({});
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => { setForm({ ...(profiles[rater] || {}) }); setDirty(false); }, [rater]);
+  useEffect(() => { setForm(f => dirty ? f : { ...(profiles[rater] || {}) }); }, [profiles]);
+  const upd = (k, v) => { setForm(p => ({ ...p, [k]: v })); setDirty(true); setSaved(false); };
+  const handleSave = async () => {
+    if (!rater) return;
+    setSaving(true);
+    try { await submitProfile(rater, form); if (applyProfile) applyProfile(rater, form); setDirty(false); setSaved(true); setTimeout(() => setSaved(false), 2500); }
+    catch (e) { console.error(e); }
+    setSaving(false);
+  };
+
+  if (!rater) {
+    return (
+      <div style={{ background: "#1e2a3a", border: "1px solid #6366f140", borderRadius: 10, padding: 20, fontSize: 13, color: "#93c5fd", lineHeight: 1.7 }}>
+        👤 補足情報を入力するには、まず「あなたは誰か」を選んでください。
+        <button onClick={onRequestIdentity} style={{ marginLeft: 10, padding: "5px 12px", borderRadius: 6, border: "1px solid #6366f1", background: "#6366f1", color: "#fff", cursor: "pointer", fontSize: 12, fontFamily: "inherit", fontWeight: 600 }}>自分を選択</button>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ background: "#1a1a2e", borderRadius: 10, border: "1px solid #6366f140", overflow: "hidden", marginBottom: 20 }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #1e1e30" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#a5b4fc" }}>🙋 {raterName} さんの補足情報</div>
+          <p style={{ fontSize: 11, color: "#64748b", margin: "4px 0 0", lineHeight: 1.6 }}>自分の分のみ編集できます。ここで保存した内容は、AIがチーム編成やタスク割り当ての参考にします（NotionへはCSVで反映）。</p>
+        </div>
+        <div style={{ padding: "16px 18px" }}>
+          {FIELDS.map(f => (
+            <div key={f.key} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 5, fontWeight: 600 }}>{f.label}</div>
+              {f.multiline
+                ? <textarea value={form[f.key] || ""} onChange={e => upd(f.key, e.target.value)} placeholder={f.ph} style={{ width: "100%", minHeight: 70, background: "#0f0f1a", border: "1px solid #2a2a3e", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", lineHeight: 1.6, resize: "vertical", outline: "none" }} />
+                : <input value={form[f.key] || ""} onChange={e => upd(f.key, e.target.value)} placeholder={f.ph} style={{ width: "100%", background: "#0f0f1a", border: "1px solid #2a2a3e", borderRadius: 6, padding: "8px 10px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />}
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
+            {saved && <span style={{ fontSize: 12, color: "#4ade80" }}>✓ 保存しました</span>}
+            <button onClick={handleSave} disabled={saving} style={{ padding: "10px 26px", borderRadius: 8, border: "none", cursor: saving ? "wait" : "pointer", fontSize: 13, fontWeight: 700, fontFamily: "inherit", background: saved ? "#0f3a2e" : "#6366f1", color: saved ? "#4ade80" : "#fff", opacity: saving ? 0.7 : 1 }}>{saving ? "⏳ 保存中..." : saved ? "✓ 保存済み" : "💾 保存する"}</button>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 10, color: "#475569" }}>保存後、他のメンバーの画面に反映するには上部「🔄 再読込」を押してください。反映に数分かかることがあります。</div>
+        </div>
+      </div>
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6ee7b7", marginBottom: 8 }}>👥 チーム全員の補足情報（参照）</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
+        {MEMBERS.map(m => { const p = profiles[m.short] || {}; const has = p.role || p.area || p.brand || p.knowledge || p.note; return (
+          <div key={m.short} style={{ background: "#1a1a2e", borderRadius: 10, padding: 14, border: `1px solid ${m.short === rater ? "#6366f140" : "#2a2a3e"}` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", marginBottom: 6 }}>{m.name}{m.short === rater && <span style={{ fontSize: 9, color: "#a5b4fc", marginLeft: 6 }}>（あなた）</span>}</div>
+            {has ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {[["役職・ポジション", p.role], ["担当エリア", p.area], ["担当ブランド・部署", p.brand], ["周辺知識・経験", p.knowledge], ["備考", p.note]].map(([l, v]) => v ? (
+                <div key={l} style={{ fontSize: 11, lineHeight: 1.5 }}><span style={{ color: "#64748b" }}>{l}：</span><span style={{ color: "#e2e8f0", whiteSpace: "pre-wrap" }}>{v}</span></div>
+              ) : null)}
+            </div> : <div style={{ fontSize: 11, color: "#475569" }}>未入力</div>}
+          </div>
+        ); })}
+      </div>
+    </div>
+  );
+}
+
 // ===== Main App =====
 function App() {
   const [view, setView] = useState("heatmap");
@@ -554,6 +681,7 @@ function App() {
   const [rater, setRater] = useState(loadRater());
   const [identityPrompt, setIdentityPrompt] = useState(false);
   const [scorePanel, setScorePanel] = useState(null);
+  const [profiles, setProfiles] = useState({});
 
   const raterName = rater ? (MEMBERS.find(m => m.short === rater)?.name || rater) : null;
 
@@ -575,14 +703,16 @@ function App() {
   useEffect(() => {
     fetchGoals().then(g => { setGoals(g); setLoading(false); });
     fetchScores().then(setCsvScores);
+    fetchProfiles().then(setProfiles);
     if (!loadRater()) setIdentityPrompt(true);
   }, []);
 
-  const refreshAll = async () => { setLoading(true); const [g, s] = await Promise.all([fetchGoals(), fetchScores()]); setGoals(g); setCsvScores(s); setLoading(false); };
+  const refreshAll = async () => { setLoading(true); const [g, s, p] = await Promise.all([fetchGoals(), fetchScores(), fetchProfiles()]); setGoals(g); setCsvScores(s); setProfiles(p); setLoading(false); };
 
   // スコア入力モード制御
   const pickIdentity = (short) => { setRater(short); saveRater(short); setIdentityPrompt(false); };
   const resetIdentity = () => { clearRater(); setRater(null); };
+  const applyProfile = (short, p) => { setProfiles(prev => ({ ...prev, [short]: { ...p } })); };
   const applyScore = (target, skillId, r, level) => {
     setCsvScores(prev => {
       const next = { ...prev };
@@ -617,11 +747,11 @@ function App() {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
           <div style={{ display: "flex", gap: 2, background: "#1a1a2e", borderRadius: 8, padding: 3, flexWrap: "wrap" }}>
-            {[["heatmap","ヒートマップ"],["assign","アサイン検索"],["members","メンバー別"],["gaps","ギャップ分析"],["defs","スキル定義"],["manual","マニュアル"]].map(([k,l]) =>
+            {[["heatmap","ヒートマップ"],["profile","補足情報入力"],["defs","スキル定義"],["manual","マニュアル"]].map(([k,l]) =>
               <Pill key={k} active={view===k} onClick={() => { setView(k); setSkill(null); }}>{l}</Pill>
             )}
           </div>
-          {!["defs","manual"].includes(view) && <div style={{ display: "flex", gap: 2, background: "#1a1a2e", borderRadius: 8, padding: 3, alignItems: "center" }}>
+          {!["defs","manual","profile"].includes(view) && <div style={{ display: "flex", gap: 2, background: "#1a1a2e", borderRadius: 8, padding: 3, alignItems: "center" }}>
             <span style={{ fontSize: 10, color: "#64748b", padding: "0 6px" }}>表示：</span>
             <Mode k="combined" l="総合" /><Mode k="self" l="自己" /><Mode k="peer" l="他者" />
           </div>}
@@ -674,56 +804,8 @@ function App() {
           );
         })()}
 
-        {/* ASSIGN */}
-        {view === "assign" && (() => { const ranked = skill != null ? data.map(m => ({...m, sc: score(m, skill)})).filter(m => m.sc > 0).sort((a, b) => b.sc - a.sc) : []; return (
-          <div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 16 }}>{SKILLS.map(sk => <button key={sk.id} onClick={() => setSkill(skill === sk.id ? null : sk.id)} style={{ padding: "6px 11px", borderRadius: 14, border: `1px solid ${cc(sk.cat)}40`, background: skill === sk.id ? cc(sk.cat)+"20" : "#1a1a2e", color: skill === sk.id ? cc(sk.cat) : "#94a3b8", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>{sk.short}</button>)}</div>
-            {skill != null && <div style={{ background: "#1a1a2e", borderRadius: 10, padding: 16, border: "1px solid #2a2a3e" }}>
-              <h3 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 12px", color: cc(SKILLS[skill].cat) }}>{SKILLS[skill].name}</h3>
-              {ranked.map((m, i) => { const c = cb(m.sc); return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", marginBottom: 3, background: i === 0 ? "#0f2030" : "transparent", borderRadius: 6, border: i === 0 ? `1px solid ${cc(SKILLS[skill].cat)}30` : "none" }}>
-                  <div style={{ width: 28, height: 28, borderRadius: 5, background: c.bg, border: `1px solid ${c.bd}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.text }}>{fmt(m.sc)}</div>
-                  <div style={{ flex: 1, cursor: "pointer" }} onClick={() => openCell(m)}><div style={{ fontSize: 13, fontWeight: 600, borderBottom: "1px dashed #334155", display: "inline" }}>{m.name}</div><div style={{ fontSize: 10, color: "#64748b" }}>{m.role}</div></div>
-                  {i === 0 && <span style={{ fontSize: 9, fontWeight: 600, color: cc(SKILLS[skill].cat), background: cc(SKILLS[skill].cat)+"15", padding: "2px 7px", borderRadius: 4 }}>最適</span>}
-                </div>); })}
-            </div>}
-          </div>); })()}
-
-        {/* MEMBERS */}
-        {view === "members" && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 10 }}>
-          {data.filter(m => m.self.some(s => s > 0) || m.peer.some(p => p != null)).map((m, i) => {
-            const scores = SKILLS.map((_, si) => score(m, si) || 0); const filled = scores.filter(s => s > 0);
-            const avg = filled.length ? (filled.reduce((a, b) => a + b, 0) / filled.length).toFixed(1) : "—"; const mg = goals[m.short] || {};
-            return <div key={i} style={{ background: "#1a1a2e", borderRadius: 10, padding: 14, border: "1px solid #2a2a3e" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, cursor: "pointer" }} onClick={() => openCell(m)}>
-                <div><div style={{ fontSize: 13, fontWeight: 700, borderBottom: "1px dashed #334155", display: "inline" }}>{m.name}</div><GoalDot member={m} /><div style={{ fontSize: 10, color: "#64748b" }}>{m.role}</div></div>
-                <div style={{ textAlign: "right" }}><div style={{ fontSize: 17, fontWeight: 700, color: "#6366f1" }}>{avg}</div><div style={{ fontSize: 9, color: "#64748b" }}>平均</div></div>
-              </div>
-              {SKILLS.map((sk, si) => { const sv = m.self[si] || 0, pv = m.peer[si] || 0, g = mg[si]?.target; return (
-                <div key={si} style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                  <div style={{ width: 60, fontSize: 9, color: "#94a3b8", textAlign: "right" }}>{sk.short}</div>
-                  <div style={{ flex: 1, height: 10, background: "#0f0f1a", borderRadius: 2, position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", top: 0, left: 0, width: `${(sv/5)*100}%`, height: "50%", background: cc(sk.cat)+"90" }} />
-                    <div style={{ position: "absolute", bottom: 0, left: 0, width: `${(pv/5)*100}%`, height: "50%", background: cc(sk.cat)+"40" }} />
-                    {g && <div style={{ position: "absolute", top: 0, left: `${(g/5)*100}%`, width: 2, height: "100%", background: "#f59e0b", transform: "translateX(-1px)" }} />}
-                  </div>
-                  <div style={{ width: 34, fontSize: 8, color: "#94a3b8", textAlign: "center" }}>{sv||"—"}/{pv?pv.toFixed(1):"—"}</div>
-                </div>); })}
-              <div style={{ fontSize: 8, color: "#475569", marginTop: 4 }}>上段=自己 / 下段=他者{Object.keys(mg).some(k => mg[k]?.target) ? " / 黄線=目標" : ""}</div>
-            </div>; })}
-        </div>}
-
-        {/* GAPS */}
-        {view === "gaps" && (() => { const gd = SKILLS.map((sk, i) => { const sc = data.map(m => score(m, i)).filter(v => v && v > 0); const avg = sc.length ? +(sc.reduce((a, b) => a + b, 0) / sc.length).toFixed(1) : 0; const gap = sc.filter(s => s <= 2).length; return {...sk, avg, gap}; }); return <div>{gd.map((sk, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", marginBottom: 3, background: "#1a1a2e", borderRadius: 7, border: "1px solid #2a2a3e" }}>
-            <div style={{ width: 3, height: 28, borderRadius: 2, background: cc(sk.cat) }} />
-            <div style={{ width: 90, flexShrink: 0 }}><div style={{ fontSize: 11, fontWeight: 600 }}>{sk.short}</div></div>
-            <div style={{ flex: 1, display: "flex", gap: 2 }}>{data.filter(m => score(m, i) > 0).sort((a, b) => score(b, i) - score(a, i)).map((m, j) => { const v = score(m, i), c = cb(v); return <div key={j} title={`${m.short}: ${fmt(v)}`} onClick={() => openCell(m)} style={{ width: 20, height: 20, borderRadius: 3, background: c.bg, border: `1px solid ${c.bd}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 8, fontWeight: 700, color: c.text, cursor: "pointer" }}>{fmt(v)}</div>; })}</div>
-            <div style={{ width: 80, textAlign: "right" }}>
-              <div style={{ fontSize: 10, fontWeight: 600, color: sk.gap > 4 ? "#f87171" : sk.gap > 2 ? "#fbbf24" : "#4ade80" }}>{sk.gap > 4 ? "要強化" : sk.gap > 2 ? "やや不足" : "充足"}</div>
-              <div style={{ fontSize: 8, color: "#64748b" }}>平均 {sk.avg}</div>
-            </div>
-          </div>))}</div>; })()}
+        {/* PROFILE（補足情報入力） */}
+        {view === "profile" && <ProfileView profiles={profiles} rater={rater} raterName={raterName} onRequestIdentity={() => setIdentityPrompt(true)} applyProfile={applyProfile} />}
 
         {/* SKILL DEFINITIONS */}
         {view === "defs" && <SkillDefsView />}
