@@ -241,6 +241,7 @@ function exportCSV(data, profiles) {
 const Pill = ({ active, onClick, children, color }) => <button onClick={onClick} style={{ padding: "5px 12px", borderRadius: 7, border: "none", cursor: "pointer", fontSize: 11, fontWeight: 600, fontFamily: "inherit", background: active ? (color || "#6366f1") : "transparent", color: active ? "#fff" : "#94a3b8" }}>{children}</button>;
 const Section = ({ title, children }) => <div style={{ marginBottom: 20 }}><div style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", marginBottom: 8, borderBottom: "1px solid #2a2a3e", paddingBottom: 6 }}>{title}</div>{children}</div>;
 const P = ({ children }) => <p style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.7, margin: "0 0 8px" }}>{children}</p>;
+const Fig = ({ src, caption }) => <figure style={{ margin: "10px 0 14px" }}><img src={src} alt={caption || ""} loading="lazy" style={{ width: "100%", maxWidth: 560, display: "block", borderRadius: 8, border: "1px solid #2a2a3e", background: "#0f0f1e" }} />{caption && <figcaption style={{ fontSize: 10, color: "#64748b", marginTop: 5, lineHeight: 1.5 }}>{caption}</figcaption>}</figure>;
 const LevelBar = ({ value, target }) => { const pct = v => (Math.max(0, Math.min(5, v||0))/5*100) + "%"; const col = (value ? cb(Math.round(value)).text : "#334155"); return (
   <div style={{ position: "relative", height: 16, background: "#0f0f1a", borderRadius: 8, border: "1px solid #2a2a3e" }}>
     <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: pct(value), background: col, borderRadius: 8, transition: "width .2s" }} />
@@ -540,6 +541,7 @@ function ManualView() {
           <Section title="🙋 最初に1回だけ：入力者（あなた）を選ぶ">
             <P>初めて開いたとき、「あなたは誰か」を選ぶプロンプトが出ます。自分の名前を選んでください。<b style={{color:"#e2e8f0"}}>この選択はお使いの端末（ブラウザ）に記憶される</b>ので、毎回選び直す必要はありません。</P>
             <P>選んだあとは、右上に「入力者: あなたの名前」と表示されます。</P>
+            <Fig src="assets/manual/identity.png" caption="初回に表示される入力者の選択プロンプトと、選択後に右上に出る入力者バッジ" />
             <P><b style={{color:"#f59e0b"}}>共有PCを使う場合</b>は、入力前に右上の「別の人として使う」を押してリセットし、改めて自分を選んでください。他人のままだと、入力が他人名義で記録されてしまいます。</P>
           </Section>
           <Section title="👀 画面の見方（ヒートマップ）">
@@ -547,10 +549,12 @@ function ManualView() {
             <P>セルの色が濃いほどレベルが高い（1:白 → 5:金）。</P>
             <P>自分のパネルでは現在レベルが<b style={{color:"#e2e8f0"}}>バー表示</b>になります。塗りの長さ＝<b style={{color:"#e2e8f0"}}>総合スコア</b>（自己評価と他者平均の合成）、<b style={{color:"#f59e0b"}}>オレンジのマーカー＝目標</b>です。</P>
             <P>右上の<b style={{color:"#e2e8f0"}}>表示切替（総合／自己／他者）</b>で、どのスコアを色に反映するか切り替えられます。</P>
+            <Fig src="assets/manual/heatmap.png" caption="二段構成のヒートマップ。上段＝あなたのスキル、下段＝チームメンバー" />
           </Section>
           <Section title="🗂 タブの説明">
             <P><b style={{color:"#e2e8f0"}}>ヒートマップ</b> — 8名×13スキルの一覧。セルをクリックして入力します（自分のセル＝自己評価＆目標、メンバーのセル＝他者評価）。</P>
             <P><b style={{color:"#e2e8f0"}}>補足情報入力</b> — 役職・担当エリア・担当ブランド・周辺知識などを入力します（自分の分のみ編集）。AIがチーム編成やタスク割り当ての参考にします。</P>
+            <Fig src="assets/manual/profile.png" caption="補足情報入力タブ。担当エリア・担当ブランドは選択式（自分の分のみ編集可）" />
             <P><b style={{color:"#e2e8f0"}}>スキル定義</b> — 13スキル全てのレベル定義（1〜5）を確認できる。</P>
             <P><b style={{color:"#e2e8f0"}}>マニュアル</b> — このページ。</P>
           </Section>
@@ -558,6 +562,7 @@ function ManualView() {
             <P>モードの切り替えは不要です。<b style={{color:"#e2e8f0"}}>セルをクリックするだけ</b>でパネルが開きます。</P>
             <P>1. ヒートマップで評価したいセルをクリック</P>
             <P>2. レベル（1〜5）を選んで「💾 保存する」</P>
+            <Fig src="assets/manual/score-input.png" caption="セルをクリックすると開く自己評価の入力パネル。レベルを選んで保存" />
             <P>・<b style={{color:"#e2e8f0"}}>自分のセル＝自己評価</b>、<b style={{color:"#e2e8f0"}}>他のメンバーのセル＝他者評価</b>として自動で記録されます（評価者は「あなた」が自動で入ります）。</P>
             <P>・他者評価は<b style={{color:"#e2e8f0"}}>評価者ごとに最新値を採用し、その平均</b>が他者評価として表示されます。</P>
             <P>・<b style={{color:"#e2e8f0"}}>総合スコア＝（自己評価 ＋ 他者平均）÷ 2</b>。ダッシュボードの初期表示はこの総合です。</P>
@@ -569,10 +574,12 @@ function ManualView() {
             <P>3. 目標レベル（1〜5）を選択（バーのオレンジマーカーが目標）</P>
             <P>4.「どうやって目標を達成しますか？」に具体的なアクションを記入</P>
             <P>5.「💾 保存する」をクリック → スプレッドシートに自動保存</P>
+            <Fig src="assets/manual/goal.png" caption="目標パネル。バーの塗り＝総合スコア、オレンジのマーカー＝目標レベル" />
           </Section>
           <Section title="💾 保存と反映">
             <P>保存内容はスプレッドシートに記録されます。<b style={{color:"#f59e0b"}}>他の人の画面や自分の最新状態に反映するには、右上の「🔄 再読込」</b>を押してください。</P>
             <P>※ 反映には数分のラグが出ることがあります。すぐ反映されなくても、少し待ってから再読込すれば表示されます。</P>
+            <Fig src="assets/manual/topbar.png" caption="画面右上の操作ボタン。🔄再読込／📥CSV／表示切替（総合・自己・他者）" />
           </Section>
           <Section title="📥 CSVエクスポート">
             <P>右上の「📥 CSV」ボタンで、全メンバーの評価データ＋目標をCSVファイルとしてダウンロードできます。AI分析にそのまま使えます。</P>
